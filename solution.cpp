@@ -2,6 +2,7 @@
 #include <vector>
 #include <stack>
 #include <fstream>
+#include <sstream>
 #include <cstdlib>
 #include <ctime>
 #include <algorithm>
@@ -9,11 +10,48 @@
 
 using namespace std;
 
-void write_board_csv(const vector<vector<int>>& board, bool first) {
+// Forward declaration
+int compute_score(const std::vector<std::vector<int>>& board);
+
+#include <iterator>
+
+// TODO: Compress a row: remove zeros, pad with zeros at the end
+std::vector<int> compress_row(const std::vector<int>& row) {
+    // TODO: Use copy_if to filter non-zero values, then pad with zeros
+    std::vector<int> compressed;
+
+    std::copy_if(row.begin(), row.end(), std::back_inserter(compressed), [](int value) { return value != 0;});
+    compressed.resize(4, 0);
+
+    return compressed;
+}
+
+// TODO: Merge a row (assumes already compressed)
+std::vector<int> merge_row(std::vector<int> row) {
+    // TODO: Implement merging logic - combine adjacent equal tiles
+    for (auto i = 0; i < 3; i++) {
+        if (row[i] != 0 && row[i] == row[i + 1]) {
+            row[i] *= 2;
+            row[i + 1] = 0;
+            i++;
+        }
+    }
+    return compress_row(row);
+}
+
+
+
+
+void write_board_csv(const vector<vector<int>>& board, bool first, const string& stage) {
     ios_base::openmode mode = ios::app;
     if (first) mode = ios::trunc;
     ofstream fout("game_output.csv", mode);
     if (!fout) return;
+
+    // Write stage identifier
+    fout << stage << ",";
+
+    // Write board data
     for (int r=0;r<4;r++){
         for (int c=0;c<4;c++){
             fout<<board[r][c];
@@ -23,81 +61,72 @@ void write_board_csv(const vector<vector<int>>& board, bool first) {
     fout<<"\n";
 }
 
-void print_board(const vector<vector<int>>& board, bool first) {
-    // TODO: implement print_board here
+void read_board_csv(vector<vector<int>>& board) {
+    ifstream fin("game_input.csv");
+
+    string line;
+    int r = 0;
+    while (getline(fin, line) && r < 4) {
+        stringstream ss(line);
+        string cell;
+        int c = 0;
+        while (getline(ss, cell, ',') && c < 4) {
+            try {
+                board[r][c] = stoi(cell);
+            } catch (...) {
+                board[r][c] = 0;  // Default to 0 for invalid input
+            }
+            c++;
+        }
+        r++;
+    }
+}
+
+void print_board(const vector<vector<int>>& board) {
+    // TODO: Print the score using compute_score(board)
+    // TODO: Print the board in a 4x4 format
+    // TODO: Use dots (.) for empty cells (value 0)
+    // TODO: Use tabs (\t) to separate values for alignment
+
+    cout << "Score: " << compute_score(board) << endl;
+
     for (const auto& row : board) {
         for (const auto& cell : row) {
             if (cell == 0) {
-                cout << "[ ]";
+                cout << ".";
             } else {
-                cout << "[" << cell << "]";
-            } 
-            cout << " ";
-        }
+                cout << cell;
+            }
+            cout << "\t";
+        } 
         cout << endl;
     }
     cout << endl;
-
-    write_board_csv(board, first);
-
 }
 
-
-
-// TODO: use algorithms to spawn properly
-void spawn_tile(vector<vector<int>>& board) {
-vector<pair<int, int>> empty_positions;
+void spawn_tile(std::vector<std::vector<int>>& board) {
+    std::vector<std::pair<int,int>> empty;
     for (int r = 0; r < 4; r++)
-        for (int c = 0; c<4; c++)
-            if (board[r][c] == 0) {
-		 empty_positions.push_back(make_pair(r, c));
-	 }
+        for (int c = 0; c < 4; c++)
+            if (board[r][c] == 0) empty.emplace_back(r,c);
 
-     if (empty_positions.empty()) return ;
+    if (empty.empty()) return;
 
-     static std::mt19937 rng(std::time(nullptr));
-     std::uniform_int_distribution<> pos_dist(0, empty_positions.size() - 1);
-     
-     int random_index = pos_dist(rng);
-     int r = empty_positions[random_index].first;
-     int c = empty_positions[random_index].second;
+    static std::mt19937 gen(42);  // Fixed seed for deterministic behavior
+    std::uniform_int_distribution<> pos_dist(0, empty.size()-1);
+    std::uniform_int_distribution<> val_dist(1, 10);
 
-    std::uniform_int_distribution<> value_dist(1, 10);
-    int tile_val = (value_dist(rng) <= 9) ? 2 : 4;
-    board[r][c] = tile_val;
-
-
-    // TODO: Feed this into chat GPT and have it correct the function for you
-    // with proper prompting
+    auto [r, c] = empty[pos_dist(gen)];
+    board[r][c] = (val_dist(gen) == 1 ? 4 : 2); // 10% chance of 4
 }
 
-
-// TODO: Compress a row, remove zeroes, and then pad with zeroes at the end
-std::vector<int> compress_row(const std::vector<int>& row) {
-    std::vector<int> compressed;
-
-    std::copy_if(row.begin(), row.end(), std::back_inserter(compressed), [](int value) { return value != 0;});
-    compressed.resize(4, 0);
-
-    return compressed;
-
-    }
-    
-// TODO: Merge a row (assumes the row is already compressed)
-std::vector<int> merge_row(std::vector<int> row) {
-    for (auto i = 0; i < 3; i++) {
-        if (row[i] != 0 && row[i] == row[i + 1]) {
-            row[i] *= 2;
-            row[i + 1] = 0;
-            i++;
-        }
-    }
-    return compress_row(row);
-
-}
-// TODO: use copy_if and iterators
-bool move_left(vector<vector<int>>& board) {
+// TODO: Implement move_left using compress_row and merge_row
+bool move_left(std::vector<std::vector<int>>& board) {
     bool moved = false;
+    // TODO: For each row:
+    //   1. Compress the row (remove zeros)
+    //   2. Merge adjacent equal tiles
+    //   3. Check if the row changed
     for (auto& row : board) {
         const auto original = row;
 
@@ -111,10 +140,10 @@ bool move_left(vector<vector<int>>& board) {
     return moved;
 }
 
-// TODO: use reverse iterators
-bool move_right(vector<vector<int>>& board) {
-    auto moved = false;
-
+// TODO: Implement move_right (hint: reverse, compress, merge, reverse)
+bool move_right(std::vector<std::vector<int>>& board) {
+    bool moved = false;
+    // TODO: Similar to move_left but with reversal
     for (auto& row : board) {
         std::vector<int> original = row;
         reverse(row.begin(), row.end());
@@ -127,13 +156,12 @@ bool move_right(vector<vector<int>>& board) {
         }
     }
     return moved;
-
-    
 }
-// TODO: use column traversal
-bool move_up(vector<vector<int>>& board) {
-    auto moved = false; 
 
+// TODO: Implement move_up (work with columns)
+bool move_up(std::vector<std::vector<int>>& board) {
+    bool moved = false;
+    // TODO: Extract column, compress, merge, write back
     for (auto c = 0; c < 4; c++) {
         auto column = std::vector<int>{};
 
@@ -157,10 +185,11 @@ bool move_up(vector<vector<int>>& board) {
     }
     return moved;
 }
-// TODO: use column traversal with reverse
-bool move_down(vector<vector<int>>& board) {
-    auto moved = false;
 
+// TODO: Implement move_down (columns with reversal)
+bool move_down(std::vector<std::vector<int>>& board) {
+    bool moved = false;
+    // TODO: Similar to move_up but with reversal
     for (auto c = 0; c < 4; c++) {
         auto column = std::vector<int>{};
 
@@ -184,32 +213,56 @@ bool move_down(vector<vector<int>>& board) {
         }
     }
 
-    return moved;
+    return moved;}
+
+
+
+int compute_score(const std::vector<std::vector<int>>& board) {
+    int score = 0;
+    for (const auto& row : board)
+        for (int val : row)
+            score += val;
+    return score;
 }
 
+
 int main(){
-    srand(time(nullptr));
     vector<vector<int>> board(4, vector<int>(4,0));
-    spawn_tile(board);
-    spawn_tile(board);
+
+    // Read initial board from CSV
+    read_board_csv(board);
 
     stack<vector<vector<int>>> history;
     bool first=true;
 
     while(true){
-        print_board(board, first);
-        first=false;
+        print_board(board);
+        if (first) {
+            write_board_csv(board, true, "initial");
+            first = false;
+        }
+
         cout<<"Move (w=up, a=left, s=down, d=right), u=undo, q=quit: ";
         char cmd;
         if (!(cin>>cmd)) break;
         if (cmd=='q') break;
 
         if (cmd=='u') {
-            // TODO: get the history and print the board and continue
+            // TODO: Check if history stack is not empty using !history.empty()
+            // If not empty:
+            //   1. Set board = history.top() to restore the previous state
+            //   2. Remove the top element with history.pop()
+            //   3. Call print_board(board) to show the restored board
+            //   4. Call write_board_csv(board, false, "undo") to log the undo
+            // Use 'continue' to skip the rest of the loop iteration
+
             if (!history.empty()) {
                 board = history.top();
                 history.pop();
+                print_board(board);
+                write_board_csv(board, false, "undo");
             }
+            continue;
         }
 
         vector<vector<int>> prev = board;
@@ -220,9 +273,19 @@ int main(){
         else if (cmd=='s') moved=move_down(board);
 
         if (moved) {
-            // TODO: Store the previous state here!
+            // TODO: Push the previous board state to history stack
+            // Use: history.push(prev)
             history.push(prev);
+
+            // Write board after merge but before spawn
+            write_board_csv(board, false, "merge");
+
             spawn_tile(board);
+            // Write board after spawn
+            write_board_csv(board, false, "spawn");
+        } else {
+            // No move was made
+            write_board_csv(board, false, "invalid");
         }
     }
     return 0;
